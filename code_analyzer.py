@@ -71,6 +71,48 @@ def check_blank_lines(path):
     return warnings
 
 
+def check_spaces_after_construction_name(path):
+    warnings = []
+    with open(path, "r") as file:
+        for toktype, tok, start, _, line in tokenize.generate_tokens(file.readline):
+            template = r"_{0,2}def {2,}\w|class {2,}\w"  # template match if there's 2 or more spaces between the keywords 'def' or 'class' and their name definition
+            if "class" in line or "def" in line:
+                line = line.lstrip()
+                if line.startswith("class") or line.startswith("def"):
+                    if toktype == tokenize.NAME and tok == "class" or tok == "def":
+                        if re.match(template, line):
+                            warnings.append(f"{path}: Line {start[0]}: S007 Too many spaces after '{tok}'")
+    return warnings
+
+
+def check_class_is_camel_case(path):
+    warnings = []
+    with open(path, "r") as file:
+        for toktype, tok, start, _, line in tokenize.generate_tokens(file.readline):
+            template = r"[A-Z][a-z]*([A-Z][a-z]*)|[A-Z]\w+"  # template match PascalCase words(""CamelCase"" for jetbrains)
+            if "class" in line:
+                line = line.lstrip()
+                if line.startswith("class"):
+                    if toktype == tokenize.NAME and tok != "class":
+                        if not re.match(template, tok):
+                            warnings.append(f"{path}: Line {start[0]}: S008  Class name '{tok}' should use CamelCase")
+    return warnings
+
+
+def check_def_is_snake_case(path):
+    warnings = []
+    with open(path, "r") as file:
+        for toktype, tok, start, _, line in tokenize.generate_tokens(file.readline):
+            template = r"def _{2}[0-9a-z_]*|def [^_A-Z][0-9a-z_]*"
+            if "def" in line:
+                line = line.lstrip()
+                if line.startswith("def"):
+                    if toktype == tokenize.NAME and tok != "def":
+                        if not re.match(template, line):
+                            warnings.append(f"{path}: Line {start[0]}: S009 Function name '{tok}' should use snake_case")
+    return warnings
+
+
 def convert(s):
     """Convert a string to int if possible, if not return the string unchanged."""
     return int(s) if s.isdigit() else s
@@ -108,7 +150,10 @@ if os.path.isdir(directory_or_file):
                               check_unnecessary_semicolon(file_path),
                               check_space_before_comment(file_path),
                               check_todo(file_path),
-                              check_blank_lines(file_path))
+                              check_blank_lines(file_path),
+                              check_spaces_after_construction_name(file_path),
+                              check_class_is_camel_case(file_path),
+                              check_def_is_snake_case(file_path))
 else:
     file_path = directory_or_file  # handle in case argument is a file
     if file_path.endswith(".py"):  # check if the file is a python script, if true executes program
@@ -117,4 +162,7 @@ else:
                       check_unnecessary_semicolon(file_path),
                       check_space_before_comment(file_path),
                       check_todo(file_path),
-                      check_blank_lines(file_path))
+                      check_blank_lines(file_path),
+                      check_spaces_after_construction_name(file_path),
+                      check_class_is_camel_case(file_path),
+                      check_def_is_snake_case(file_path))

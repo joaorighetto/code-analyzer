@@ -1,7 +1,5 @@
 import sys
 import os.path
-import ast
-from analyser import Analyser
 from util import sort_warnings
 from tokenize_checks import tokenize_checks
 from ast_checks import ast_checks

@@ -8,5 +8,6 @@ def ast_checks(path):
         tree = ast.parse(file.read())
         analyser = Analyser()
         analyser.visit(tree)
+        analyser.check_camel_case()
         analyser.report()
     return warnings

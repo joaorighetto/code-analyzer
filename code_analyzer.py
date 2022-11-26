@@ -5,64 +5,42 @@ import re
 import tokenize
 
 
-class Analyser(ast.NodeVisitor):
-    def __init__(self):
-        self.analysed = {"attributes": [], "arguments": [], "func_names": [], "warnings": []}
+def perform_checks(tree, path):
+    warnings = []
+    for step in ast.walk(tree):
+        if isinstance(step, ast.FunctionDef):
+            argument_names = [a.arg for a in step.args.args]
+            for argument in argument_names:
+                if not re.match(r"^_{0,2}[\da-z_]+", argument):
+                    snake_case_warning = f"{path}: Line {step.lineno}: S010 Argument name '{argument}' should be snake_case"
+                    if snake_case_warning not in warnings:
+                        warnings.append(snake_case_warning)
+            for elem in step.args.defaults:
+                if isinstance(elem, ast.List):
+                    mutable_argument_warning = f"{path}: Line {elem.lineno}: S012 Default argument value is mutable"
+                    warnings.append(mutable_argument_warning)
+        elif isinstance(step, ast.Name) and isinstance(step.ctx, ast.Store):
+            variable = step.id
+            if not re.match(r"^_{0,2}[\da-z_]+", variable):
+                snake_case_warning = f"{path}: Line {step.lineno}: S011 Variable '{variable}' should be snake_case"
+                if snake_case_warning not in warnings:
+                    warnings.append(snake_case_warning)
 
-    def visit_FunctionDef(self, node):
-        for a in node.args.args:
-            args = (a.arg, a.lineno, node.col_offset, node.end_col_offset, "Argumento de funcao")
-            self.analysed["arguments"].append(args)
-        names = (node.name, node.lineno, node.col_offset, node.end_col_offset, "Nome de funcao")
-        self.analysed["func_names"].append(names)
-        for step in ast.walk(node):
-            if isinstance(step, ast.arguments):
-                if len(step.defaults) > 0:
-                    for item in step.defaults:
-                        if isinstance(item, ast.List):
-                            self.analysed["warnings"].append(f"Line {item.lineno}: S012 Default argument value is mutable")
-        self.generic_visit(node)
-
-    def visit_Attribute(self, node):
-        attrs = (node.attr, node.lineno, node.col_offset, node.end_col_offset, "Atributos")
-        self.analysed["attributes"].append(attrs)
-
-    def visit_Name(self, node):
-        args = (node.id, node.lineno, node.col_offset, node.end_col_offset, "Nomes")
-        self.analysed["arguments"].append(args)
-
-    def check_camel_case(self):  # S010 & S012 checks
-        for tup in self.analysed["arguments"]:
-            if not re.match(r"^_{0,2}[\da-z_]+", tup[0]):
-                snake_case_warning = f"Line {tup[1]}: S010 Argument name '{tup[0]}' should be snake_case"
-                if snake_case_warning not in self.analysed["warnings"]:
-                    self.analysed["warnings"].append(snake_case_warning)
-        for tup in self.analysed["attributes"]:
-            if not re.match(r"^_{0,2}[\da-z_]+", tup[0]):
-                snake_case_warning = f"Line {tup[1]}: S011 Variable '{tup[0]}' should be snake_case"
-                if snake_case_warning not in self.analysed["warnings"]:
-                    self.analysed["warnings"].append(snake_case_warning)
-        for tup in self.analysed["func_names"]:
-            if not re.match(r"^_{0,2}[\da-z_]+", tup[0]):
-                snake_case_warning = f"Line {tup[1]}: S011 Variable '{tup[0]}' should be snake_case"
-                if snake_case_warning not in self.analysed["warnings"]:
-                    self.analysed["warnings"].append(snake_case_warning)
+    return warnings
 
 
 def ast_checks(path):
     with open(path, "r") as file:
         tree = ast.parse(file.read())
-        analyser = Analyser()
-        analyser.visit(tree)
-        analyser.check_camel_case()
-    return analyser.analysed["warnings"]
+        warnings = perform_checks(tree, path)
+        return warnings
 
 
 def tokenize_checks(path):
 
     warnings = []
-    new_line_count = 0
     with open(path, "r") as file:
+        new_line_count = 0
         for toktype, tok, start, end, line in tokenize.generate_tokens(file.readline):
 
             if len(line) > 79 and f"{path}: Line {start[0]}: S001 Too long" not in warnings:
@@ -87,12 +65,12 @@ def tokenize_checks(path):
 
             if toktype == tokenize.NEWLINE or toktype == tokenize.NL:
                 new_line_count += 1
-            else:
-                new_line_count = 0
                 if new_line_count == 4:
                     warnings.append(f"{path}: Line {start[0] + 1}: S006 More than two blank lines used before this line")
                     new_line_count = 0
                     continue
+            else:
+                new_line_count = 0
 
             template_1 = r"_{0,2}def {2,}\w|class {2,}\w"  # template match if there's 2 or more spaces between the keywords 'def' or 'class' and their name definition
             if "class" in line or "def" in line:
@@ -110,7 +88,7 @@ def tokenize_checks(path):
                         if not re.match(template_2, tok):
                             warnings.append(f"{path}: Line {start[0]}: S008  Class name '{tok}' should use CamelCase")
 
-            template_3 = r"def _{2}[0-9a-z_]*|def [^_A-Z][0-9a-z_]*"
+            template_3 = r"def _{1,2}[0-9a-z_]*|def [^_A-Z][0-9a-z_]*"
             if "def" in line:
                 line = line.lstrip()
                 if line.startswith("def"):
@@ -149,11 +127,8 @@ if os.path.isdir(directory_or_file):
     for item in list_of_files:
         if item.endswith(".py"):  # check if each file is a python script, if true executes program
             file_path = os.path.join(directory_or_file, item)
-            if file_path == r"C:\Users\Joao Marcos\PycharmProjects\Static Code Analyzer\Static Code Analyzer\task\test\tests.py":
-                continue  # had to include this for passing jetbrains tests
-            else:
-                sort_warnings(tokenize_checks(file_path),
-                              ast_checks(file_path))
+            sort_warnings(tokenize_checks(file_path),
+                          ast_checks(file_path))
 else:
     # handle in case argument is a file
     if directory_or_file.endswith(".py"):  # check if the file is a python script, if true executes program
